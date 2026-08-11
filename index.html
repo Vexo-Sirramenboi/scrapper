@@ -59,7 +59,7 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
 <div class="wrap">
   <header>
     <h1>GameHub</h1>
-    <p>Auto-finder + link checker. Discovers links from <b>GitHub</b>, <b>scrapes any page</b>, <b>searches the web</b> (DDG/Bing/Google), finds <b>web proxies</b>, and probes everything from your network — with HTTPS &amp; tracker info per link.</p>
+    <p>Auto-finder + link checker, 100% static (works on managed Chromebooks). Discovers links from <b>GitHub</b>, <b>scrapes any page</b>, <b>searches the web</b> (Bing RSS, DuckDuckGo, Wikipedia, Google), finds <b>web proxies</b>, and probes everything from your network — with HTTPS &amp; tracker info per link.</p>
   </header>
 
   <div class="addform">
@@ -78,16 +78,16 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
   </div>
 
   <div class="row">
+    <input type="text" id="webQuery" placeholder="Search the web — e.g. unblocked games, web proxy…" />
+    <button class="btn small" onclick="searchWebUI()">Search web</button>
+    <button class="btn small ghost" onclick="findProxies()">Find proxies</button>
+  </div>
+
+  <div class="row">
     <button class="btn small" id="btnDiscover" onclick="discover()">Discover from GitHub</button>
     <button class="btn small ghost" onclick="toggleScrape()">Scrape a page…</button>
     <button class="btn small ghost" onclick="exportLinks()">Export</button>
     <label class="btn small ghost" style="cursor:pointer">Import<input type="file" accept=".json" id="fileImport" style="display:none" onchange="importLinksFile(this)" /></label>
-  </div>
-
-  <div class="row">
-    <input type="text" id="webQuery" placeholder="Search the web — e.g. unblocked games, web proxy…" />
-    <button class="btn small" onclick="searchWebUI()">Search web</button>
-    <button class="btn small ghost" onclick="findProxies()">Find proxies</button>
   </div>
 
   <div class="addform hidden" id="scrapeRow">
@@ -101,13 +101,14 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
 
   <div class="note">
     <b>How it works / limits</b><br/>
-    ContentKeeper and Umbrella filter at the network level, so this page can't change what's blocked — but it <i>can</i> find and test links for you. Red usually means the proxy reset the connection (blocked); yellow means the site answered but looks like a block page — open it manually.<br/><br/>
-    • <b>Search web</b> — tries DuckDuckGo, then Bing (RSS), then Google, through CORS proxies. Search engines actively block browser scrapers, so this often fails or returns little — expected, not a bug. GitHub Discover and page Scrape are the reliable paths.<br/>
-    • <b>Find proxies</b> — searches GitHub repos + the web, keeps links with "proxy" in the hostname/path, checks them like any link. Heuristic — it'll miss some and catch some junk; add known proxies manually.<br/>
-    • <b>GitHub API limits</b>: ~10 searches/min, 60 core requests/hr without a token — don't spam Discover/Find proxies.<br/>
-    • <b>Google hosts</b> (<code>sites.google.com</code>, <code>drive.google.com</code>, <code>docs.google.com</code>, <code>googleusercontent.com</code>) are pre-blocked for you: skipped during discovery and marked "blocked by school" instantly. Add more to <code>CONFIG.blockedHosts</code>.<br/>
-    • <b>Security line</b> — <code>HTTPS</code> vs <code>HTTP — not secure</code>, plus a best-effort tracker scan. <code>privacy scan failed</code> means the CORS proxies were unreachable. "URL shortener" means the link redirects somewhere unknown.<br/>
-    • Reality check: your school runs ContentKeeper, which TLS-inspects HTTPS anyway — "secure" doesn't mean private from the school. And check your school's acceptable-use policy before relying on this.
+    ContentKeeper/Umbrella filter at the network level — this page can't unblock anything, but it <i>can</i> find and test links for you. Red = blocked or down; yellow = answers but looks like a block page; green = reachable now.<br/><br/>
+    • <b>Fetching order</b> — direct (for CORS-open sites like Wikipedia) → <code>r.jina.ai</code> (free page-to-text reader, keyless) → <code>api.allorigins.win</code> → <code>corsproxy.io</code> → <code>api.codetabs.com</code>. Public proxies rotate and die constantly — if everything's failing, swap in new ones at <code>CONFIG.fetchProxies</code>.<br/>
+    • <b>Search web</b> — Bing RSS, then DuckDuckGo, then Wikipedia (reliable, direct CORS), then Google (usually blocked by anti-bot — expected). Search engines fight scrapers; "no results" sometimes just means "try again later."<br/>
+    • <b>Find proxies</b> — GitHub repos + web search, keeping links with "proxy" in the host/path. Heuristic — it misses some and catches junk; add known proxies manually.<br/>
+    • <b>Tracker scan caveat</b> — if a page was fetched through <code>r.jina.ai</code> (markdown), the script/tracker count can under-report, because scripts are stripped before you see the text.<br/>
+    • <b>Google hosts</b> (<code>sites.google.com</code>, <code>drive.google.com</code>, <code>docs.google.com</code>, <code>googleusercontent.com</code>) are pre-blocked for you — add more to <code>CONFIG.blockedHosts</code>.<br/>
+    • <b>GitHub API</b> — ~10 searches/min, 60 core requests/hr unauthenticated; don't spam Discover.<br/>
+    • If the filter blocks <code>github.io</code> itself, this page won't load. Use Export/Import to move your list between home and school. Check your school's acceptable-use policy before relying on this.
   </div>
 </div>
 
@@ -118,21 +119,20 @@ const CONFIG = {
   maxRepos: 5,
   maxLinksPerRepo: 12,
   maxImportLinks: 40,
-  proxies: [
+  // Public CORS proxies — tried after direct fetch and r.jina.ai.
+  fetchProxies: [
     'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?url='
+    'https://corsproxy.io/?url=',
+    'https://api.codetabs.com/v1/proxy?quest='
   ],
-  // Queries used by the "Find proxies" button (GitHub + web search).
   proxyQueries: ['web proxy', 'free web proxy', 'proxy list'],
-  // Hosts that never work on your network. Filtered out of discovery
-  // results, and saved links to them are marked "blocked by school" instantly.
+  // Hosts that never work on your network.
   blockedHosts: [
     'sites.google.com',
     'drive.google.com',
     'docs.google.com',
     'googleusercontent.com'
   ],
-  // Substrings searched in page HTML to detect tracking/advertising.
   trackerPatterns: [
     'google-analytics.com', 'googletagmanager.com', 'googleadservices.com',
     'doubleclick.net', 'adservice.google.com', 'connect.facebook.net',
@@ -147,11 +147,9 @@ const CONFIG = {
     'pinterest.com/ct/', 'twitter.com/analytics', 'cloudflareinsights.com',
     'cookiebot.com', 'onetrust.com', 'cookielaw.org'
   ],
-  // URL shorteners hide where a link actually goes — worth flagging.
   shorteners: ['bit.ly','tinyurl.com','t.co','goo.gl','is.gd','buff.ly','rb.gy','shorturl.at','cutt.ly']
 };
 
-/* Starter links (public, well-known sites). Add your own via the form. */
 const BUILTIN = [
   { title:'Archive.org — Classic Games', url:'https://archive.org/details/classicpcgames', cat:'Retro', desc:'Huge library of playable DOS/arcade classics.' },
   { title:'Poki', url:'https://poki.com', cat:'Arcade', desc:'Big catalog of browser games, mobile-friendly.' },
@@ -159,7 +157,7 @@ const BUILTIN = [
   { title:'ClassicReload', url:'https://classicreload.com', cat:'Retro', desc:'Abandonware classics that run in the browser.' },
 ];
 
-const SKIP_HOSTS = ['github.com','raw.githubusercontent.com','gist.github.com','api.github.com','google.com','googleapis.com','gstatic.com','googletagmanager.com','google-analytics.com','doubleclick.net','facebook.com','twitter.com','x.com','instagram.com','youtube.com','youtu.be','w3.org','mozilla.org','schema.org','example.com','wikipedia.org','reddit.com','discord.com','discord.gg','twitch.tv','netflix.com','spotify.com'];
+const SKIP_HOSTS = ['github.com','raw.githubusercontent.com','gist.github.com','api.github.com','google.com','googleapis.com','gstatic.com','googletagmanager.com','google-analytics.com','doubleclick.net','facebook.com','twitter.com','x.com','instagram.com','youtube.com','youtu.be','bing.com','duckduckgo.com','mojeek.com','w3.org','mozilla.org','schema.org','example.com','reddit.com','discord.com','discord.gg','twitch.tv','netflix.com','spotify.com'];
 const EXT_BLOCK = /\.(css|js|mjs|json|xml|svg|png|jpe?g|gif|webp|ico|bmp|mp3|mp4|webm|ogg|ogv|pdf|zip|rar|7z|tar|gz|woff2?|ttf|eot|map|txt|md|rss|atom)$/i;
 
 const LABELS = { ok:'reachable', warn:'reachable — verify', bad:'blocked or down' };
@@ -216,40 +214,6 @@ function isBlockedHost(u){
 function isHttpsUrl(u){ try { return new URL(u).protocol === 'https:'; } catch(e){ return false; } }
 function isShortener(u){ try { return CONFIG.shorteners.includes(new URL(u).hostname.replace(/^www\./,'')); } catch(e){ return false; } }
 
-async function scanTrackers(url){
-  const html = await fetchViaProxies(url, 8000);
-  if (!html) return null;                       // scan failed — proxies blocked
-  const found = [];
-  const lower = html.toLowerCase();
-  for (const pat of CONFIG.trackerPatterns){
-    if (lower.includes(pat.toLowerCase())) found.push(pat);
-  }
-  return found;
-}
-
-async function inspectSecurity(l){
-  return {
-    isHttps: isHttpsUrl(l.url),
-    shortener: isShortener(l.url),
-    trackers: await scanTrackers(l.url)
-  };
-}
-
-function setSecurity(id, info){
-  const el = document.getElementById('sec-' + id);
-  if (!el) return;
-  const bits = [];
-  if (info.shortener) bits.push('URL shortener');
-  bits.push(info.isHttps ? 'HTTPS' : 'HTTP — not secure');
-  if (info.trackers === null) bits.push('privacy scan failed');
-  else if (info.trackers === 'n/a') { /* blocked host — no scan */ }
-  else if (info.trackers.length === 0) bits.push('no trackers');
-  else bits.push(info.trackers.length + ' tracker(s): ' + info.trackers.slice(0,3).join(', ') + (info.trackers.length > 3 ? ', …' : ''));
-  const clean = info.isHttps && !info.shortener && info.trackers !== 'n/a' && info.trackers !== null && info.trackers.length === 0;
-  el.className = 'sec' + (clean ? ' good' : ' bad');
-  el.textContent = bits.join(' · ');
-}
-
 /* ---------- link extraction ---------- */
 function isUsableUrl(u){
   try {
@@ -279,21 +243,52 @@ function extractUrls(text){
   return [...found.values()];
 }
 
-/* ---------- fetch through CORS proxies ---------- */
-async function fetchViaProxies(url, perTryMs = 9000){
-  for (const p of CONFIG.proxies){
+/* ---------- fetch through multiple paths (static-page scraping) ---------- */
+async function fetchText(url, perTryMs = 9000){
+  // 1) direct — works for CORS-open sites (Wikipedia, APIs, etc.)
+  try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), perTryMs);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok){
+      const ct = r.headers.get('content-type') || '';
+      if (/text|html|json|xml|rss|markdown/i.test(ct)) return await r.text();
+    }
+  } catch(e){}
+
+  // 2) r.jina.ai — free keyless page-to-text reader, CORS-open, ~20 req/min
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), perTryMs + 3000);
+    const r = await fetch('https://r.jina.ai/' + url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) return await r.text();
+  } catch(e){}
+
+  // 3) public CORS proxies
+  const encoded = encodeURIComponent(url);
+  for (const p of CONFIG.fetchProxies){
     try {
-      const r = await fetch(p + encodeURIComponent(url), { signal: ctrl.signal });
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), perTryMs);
+      const r = await fetch(p + encoded, { signal: ctrl.signal });
       clearTimeout(t);
       if (r.ok) return await r.text();
-    } catch(e){ clearTimeout(t); }
+    } catch(e){}
   }
   return '';
 }
 
-/* ---------- search engines ---------- */
+/* ---------- search engine parsers ---------- */
+function parseBingRss(html){
+  const out = [];
+  const re = /<link>\s*(https?:\/\/[^<\s]+)/g;
+  let m;
+  while ((m = re.exec(html))) out.push(m[1].trim());
+  return out;
+}
+
 function parseDuckDuckGo(html){
   const out = [];
   const re = /uddg=([^&"']+)/g;
@@ -305,14 +300,6 @@ function parseDuckDuckGo(html){
       if (p.protocol === 'http:' || p.protocol === 'https:') out.push(p.href);
     } catch(e){}
   }
-  return out;
-}
-
-function parseBingRss(html){
-  const out = [];
-  const re = /<link>\s*(https?:\/\/[^<\s]+)/g;
-  let m;
-  while ((m = re.exec(html))) out.push(m[1].trim());
   return out;
 }
 
@@ -330,25 +317,40 @@ function parseGoogle(html){
   return out;
 }
 
-async function searchWeb(query){
-  const sources = [
-    { name:'DuckDuckGo', url:'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), parse: parseDuckDuckGo },
-    { name:'Bing', url:'https://www.bing.com/search?q=' + encodeURIComponent(query) + '&format=rss', parse: parseBingRss },
-    { name:'Google', url:'https://www.google.com/search?q=' + encodeURIComponent(query), parse: parseGoogle }
-  ];
+async function searchWikipedia(q){
+  const api = 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent(q) +
+              '&format=json&origin=*&srlimit=20';
+  const txt = await fetchText(api);
+  try {
+    const data = JSON.parse(txt);
+    return (data.query && data.query.search || []).map(r =>
+      'https://en.wikipedia.org/wiki/' + encodeURIComponent(r.title.replace(/ /g,'_'))
+    );
+  } catch(e){ return []; }
+}
+
+async function searchWeb(query, limit){
+  limit = limit || CONFIG.maxImportLinks;
   const out = new Map();
-  for (const s of sources){
-    setStatusLine('Searching ' + s.name + '…');
-    const html = await fetchViaProxies(s.url, 9000);
-    if (!html) continue;
-    let urls = [];
-    try { urls = s.parse(html); } catch(e){}
-    for (const u of urls){
-      if (isUsableUrl(u) && out.size < CONFIG.maxImportLinks) out.set(u, u);
-    }
-    if (out.size >= CONFIG.maxImportLinks) break;
+  const add = u => { if (isUsableUrl(u) && !out.has(u)) out.set(u, u); };
+
+  setStatusLine('Searching Bing…');
+  parseBingRss(await fetchText('https://www.bing.com/search?q=' + encodeURIComponent(query) + '&format=rss')).forEach(add);
+
+  setStatusLine('Searching DuckDuckGo…');
+  parseDuckDuckGo(await fetchText('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query))).forEach(add);
+
+  if (out.size < limit){
+    setStatusLine('Searching Wikipedia…');
+    (await searchWikipedia(query)).forEach(add);
   }
-  return [...out.keys()];
+
+  if (out.size < limit){
+    setStatusLine('Trying Google (usually blocked)…');
+    parseGoogle(await fetchText('https://www.google.com/search?q=' + encodeURIComponent(query))).forEach(add);
+  }
+
+  return [...out.keys()].slice(0, limit);
 }
 
 /* ---------- proxy heuristic ---------- */
@@ -378,28 +380,27 @@ function cardHTML(l){
   if (activeCat !== 'All' && l.cat !== activeCat) return '';
   if (document.getElementById('httpOnly').checked && isHttpsUrl(l.url)) return '';
   const href = esc(l.url);
-  return `<div class="card">
-    <h3>${esc(l.title)}</h3>
-    <div class="desc">${esc(l.desc || '')}</div>
-    <div class="meta"><span class="dot" id="dot-${l.id}"></span><span id="st-${l.id}">not checked</span> · ${esc(l.cat)}</div>
-    <div class="sec" id="sec-${l.id}">privacy scan…</div>
-    <div class="actions">
-      <a href="${href}" target="_blank" rel="noopener">Open ↗</a>
-      <button class="mini" onclick="checkOne('${l.id}')">Check</button>
-      <button class="mini" onclick="removeLink('${l.id}')">Hide</button>
-    </div>
-  </div>`;
+  return '<div class="card">' +
+    '<h3>' + esc(l.title) + '</h3>' +
+    '<div class="desc">' + esc(l.desc || '') + '</div>' +
+    '<div class="meta"><span class="dot" id="dot-' + l.id + '"></span><span id="st-' + l.id + '">not checked</span> · ' + esc(l.cat) + '</div>' +
+    '<div class="sec" id="sec-' + l.id + '">privacy scan…</div>' +
+    '<div class="actions">' +
+      '<a href="' + href + '" target="_blank" rel="noopener">Open ↗</a>' +
+      '<button class="mini" onclick="checkOne(\'' + l.id + '\')">Check</button>' +
+      '<button class="mini" onclick="removeLink(\'' + l.id + '\')">Hide</button>' +
+    '</div></div>';
 }
 
 function render(){
   renderChips();
   const grid = document.getElementById('grid');
-  grid.innerHTML = allLinks().map(cardHTML).join('') || '<p style="color:var(--muted)">No links match. Discover, scrape, search, or add some!</p>';
+  grid.innerHTML = allLinks().map(cardHTML).join('') || '<p style="color:var(--muted)">No links match. Discover, search, scrape, or add some!</p>';
 }
 
 function setStatusLine(t){ document.getElementById('status').textContent = t; }
 
-/* ---------- probing ---------- */
+/* ---------- probing (from YOUR network — that's where the filter lives) ---------- */
 function imgProbe(url, timeoutMs = 4000){
   return new Promise(resolve => {
     const img = new Image();
@@ -446,7 +447,6 @@ async function runChecks(links){
       setStatus(l.id, 'checking', 'checking…');
       const r = await probe(l.url);
       setStatus(l.id, r, LABELS[r]);
-      // fire-and-forget so tracker scanning doesn't slow down the queue
       inspectSecurity(l).then(info => setSecurity(l.id, info));
     }
   }
@@ -468,6 +468,41 @@ async function checkOne(id){
   if (!stopChecking) setStatus(id, r, LABELS[r]);
   stopChecking = false;
   inspectSecurity(l).then(info => setSecurity(id, info));
+}
+
+/* ---------- security / privacy (fetched text) ---------- */
+async function scanTrackers(url){
+  const html = await fetchText(url, 8000);
+  if (!html) return null;
+  const found = [];
+  const lower = html.toLowerCase();
+  for (const pat of CONFIG.trackerPatterns){
+    if (lower.includes(pat.toLowerCase())) found.push(pat);
+  }
+  return found;
+}
+
+async function inspectSecurity(l){
+  return {
+    isHttps: isHttpsUrl(l.url),
+    shortener: isShortener(l.url),
+    trackers: await scanTrackers(l.url)
+  };
+}
+
+function setSecurity(id, info){
+  const el = document.getElementById('sec-' + id);
+  if (!el) return;
+  const bits = [];
+  if (info.shortener) bits.push('URL shortener');
+  bits.push(info.isHttps ? 'HTTPS' : 'HTTP — not secure');
+  if (info.trackers === null) bits.push('privacy scan failed');
+  else if (info.trackers === 'n/a') { /* blocked host — no scan */ }
+  else if (info.trackers.length === 0) bits.push('no trackers');
+  else bits.push(info.trackers.length + ' tracker(s): ' + info.trackers.slice(0,3).join(', ') + (info.trackers.length > 3 ? ', …' : ''));
+  const clean = info.isHttps && !info.shortener && info.trackers !== 'n/a' && info.trackers !== null && info.trackers.length === 0;
+  el.className = 'sec' + (clean ? ' good' : ' bad');
+  el.textContent = bits.join(' · ');
 }
 
 /* ---------- discover (GitHub search API) ---------- */
@@ -525,7 +560,7 @@ async function discover(){
   btn.disabled = false;
 }
 
-/* ---------- scrape (CORS proxy) ---------- */
+/* ---------- scrape a pasted page ---------- */
 function toggleScrape(){
   document.getElementById('scrapeRow').classList.toggle('hidden');
 }
@@ -538,10 +573,10 @@ async function importFromUrl(){
   let target;
   try { target = new URL(raw); } catch(e){ setStatusLine('That is not a valid URL.'); busy = false; return; }
 
-  setStatusLine('Fetching ' + hostOf(target) + ' through CORS proxies…');
-  const html = await fetchViaProxies(target.href, 9000);
+  setStatusLine('Fetching ' + hostOf(target) + ' (direct → r.jina.ai → CORS proxies)…');
+  const html = await fetchText(target.href, 9000);
   if (!html){
-    setStatusLine('Could not fetch that page — all CORS proxies failed or are blocked by the filter.');
+    setStatusLine('Could not fetch that page — every fetch path failed or was blocked. Try again later.');
     busy = false; return;
   }
 
@@ -570,18 +605,17 @@ async function searchWebUI(){
   busy = true;
   const urls = await searchWeb(q);
   if (!urls.length){
-    setStatusLine('No results — search engines usually block browser-side scrapers. Try GitHub Discover or page Scrape instead.');
+    setStatusLine('No results — search engines are throttling. Try GitHub Discover or page Scrape instead, or wait a minute.');
     busy = false; return;
   }
-  const items = urls.map(u => ({
+  const before = new Set(store.get().map(l => l.url));
+  const added = pushLinks(urls.map(u => ({
     title: hostOf(u),
     url: u,
     cat: 'Web',
     desc: 'found via web search: "' + q.slice(0,60) + '"',
     source: 'web'
-  }));
-  const before = new Set(store.get().map(l => l.url));
-  const added = pushLinks(items);
+  })));
   render();
   const fresh = allLinks().filter(l => !before.has(l.url));
   setStatusLine('Web search: ' + added + ' new link(s). Checking them…');
@@ -621,7 +655,7 @@ async function findProxies(){
 
   // 2) Web searches
   for (const q of CONFIG.proxyQueries){
-    const urls = await searchWeb(q);
+    const urls = await searchWeb(q, 20);
     urls.forEach(u => tryAdd(u, hostOf(u)));
     if (found.size >= CONFIG.maxImportLinks) break;
   }
