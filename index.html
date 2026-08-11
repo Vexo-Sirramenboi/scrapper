@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Proxy and Game List — finder &amp; link checker</title>
+<title>Proxy and game — finder &amp; link checker</title>
 <style>
 :root{
   --bg:#0f1117; --panel:#171a23; --card:#1c202b; --border:#2a2f3d;
@@ -18,6 +18,7 @@ header p{color:var(--muted);margin:0 0 20px;font-size:.95rem;line-height:1.5}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
 input[type=text]{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:.9rem}
 #search{flex:1;min-width:200px}
+.check{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted);cursor:pointer}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer;font-size:.8rem;user-select:none}
 .chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -35,6 +36,9 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
 .card h3{margin:0;font-size:1rem;word-break:break-word}
 .card .desc{color:var(--muted);font-size:.8rem;flex:1}
 .card .meta{display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--muted)}
+.card .sec{font-size:.72rem;line-height:1.4}
+.sec.good{color:var(--ok)}
+.sec.bad{color:var(--bad)}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;flex:0 0 auto}
 .dot.ok{background:var(--ok)}
 .dot.bad{background:var(--bad)}
@@ -55,7 +59,7 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
 <div class="wrap">
   <header>
     <h1>GameHub</h1>
-    <p>Auto-finder + link checker. It <b>discovers</b> game links from GitHub repos, <b>scrapes</b> links from any page you paste, and <b>probes</b> everything from your network so you can see what's reachable right now.</p>
+    <p>Auto-finder + link checker. It <b>discovers</b> game links from GitHub repos, <b>scrapes</b> links from any page you paste, and <b>probes</b> everything from your network — with security &amp; privacy info per link.</p>
   </header>
 
   <div class="addform">
@@ -68,6 +72,7 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
   <div class="row">
     <input type="text" id="search" placeholder="Search games…" oninput="render()" />
     <div class="chips" id="chips"></div>
+    <label class="check"><input type="checkbox" id="httpOnly" onchange="render()" /> HTTP only</label>
     <button class="btn" onclick="checkAll()">Check all</button>
     <button class="btn ghost" onclick="stopChecking=true">Stop</button>
   </div>
@@ -90,12 +95,13 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
 
   <div class="note">
     <b>How it works / limits</b><br/>
-    ContentKeeper and Umbrella filter at the network level, so this page can't change what's blocked — but it <i>can</i> find and test links for you. With ContentKeeper, a red result usually means the proxy reset the connection (blocked); yellow means the site answered but looks like a block page — open it manually to confirm.<br/><br/>
-    • <b>Discover</b> uses the GitHub search API — it's rate-limited (~10 searches/min, 60 core calls/hr without login), and <code>api.github.com</code> can itself be blocked.<br/>
+    ContentKeeper and Umbrella filter at the network level, so this page can't change what's blocked — but it <i>can</i> find and test links for you. With ContentKeeper, red usually means the proxy reset the connection (blocked); yellow means the site answered but looks like a block page — open it manually to confirm.<br/><br/>
+    • <b>Discover</b> uses the GitHub search API — rate-limited (~10 searches/min, 60 core calls/hr without login), and <code>api.github.com</code> can itself be blocked.<br/>
     • <b>Scrape</b> routes through public CORS proxies, which get blocked or rate-limited often. If it fails, add another proxy to <code>CONFIG.proxies</code>.<br/>
-    • If the filter blocks <code>github.io</code> or <code>api.github.com</code> by category, the page won't load or Discover won't work — a static checker can't fix that.<br/>
-    • Links are saved in your browser only — use <b>Export</b>/<b>Import</b> to share your list with friends.<br/>
-    • Check your school's acceptable-use policy before relying on this.
+    • <b>Google hosts</b> (<code>sites.google.com</code>, <code>drive.google.com</code>, <code>docs.google.com</code>, <code>googleusercontent.com</code>) are pre-blocked for you: skipped during Discover/Scrape and marked "blocked by school" instantly. Add more to <code>CONFIG.blockedHosts</code> as you find them.<br/>
+    • <b>Security line on each card</b> — instant: <code>HTTPS</code> (encrypted in transit) vs <code>HTTP — not secure</code> (plain, snoopable). Then a best-effort tracker scan: counts ad/analytics scripts found in the page HTML. <code>privacy scan failed</code> means the CORS proxies were unreachable. A "URL shortener" flag means the link redirects somewhere unknown — extra caution.<br/>
+    • Reality check: your school runs ContentKeeper, which TLS-inspects HTTPS anyway. "Secure" here means encrypted to your browser's ability — <i>not</i> private from the school. And a privacy-friendly site with zero trackers is exactly the kind of small page that's most likely to actually be unblocked.<br/>
+    • Links are saved in your browser only — use <b>Export</b>/<b>Import</b> to share your list with friends. Check your school's acceptable-use policy before relying on this.
   </div>
 </div>
 
@@ -109,7 +115,34 @@ const CONFIG = {
   proxies: [
     'https://api.allorigins.win/raw?url=',
     'https://corsproxy.io/?url='
-  ]
+  ],
+  // Hosts that never work on your network. Filtered out of Discover/Scrape
+  // results, and saved links to them get marked "blocked by school" instantly.
+  // Add more as you discover them (e.g. 'scratch.mit.edu' if it's blocked too).
+  blockedHosts: [
+    'sites.google.com',
+    'drive.google.com',
+    'docs.google.com',
+    'googleusercontent.com'
+  ],
+  // Substrings searched in page HTML to detect tracking/advertising.
+  // Keep them lowercase — matches are case-insensitive.
+  trackerPatterns: [
+    'google-analytics.com', 'googletagmanager.com', 'googleadservices.com',
+    'doubleclick.net', 'adservice.google.com', 'connect.facebook.net',
+    'facebook.com/tr', 'fbq(', 'scorecardresearch.com', 'quantcast.com',
+    'quantserve.com', 'criteo.com', 'taboola.com', 'outbrain.com',
+    'hotjar.com', 'mouseflow.com', 'clarity.ms', 'fullstory.com',
+    'sessioncam.com', 'crazyegg.com', 'mixpanel.com', 'segment.com',
+    'amplitude.com', 'heap.io', 'posthog.com', 'matomo', 'plausible.io',
+    'adnxs.com', 'rubiconproject.com', 'pubmatic.com', 'openx.net',
+    'adform.net', 'casalemedia.com', 'smartadserver.com',
+    'linkedin.com/insight', 'snap.licdn.com', 'tiktok.com/i18n/pixel',
+    'pinterest.com/ct/', 'twitter.com/analytics', 'cloudflareinsights.com',
+    'cookiebot.com', 'onetrust.com', 'cookielaw.org'
+  ],
+  // URL shorteners hide where a link actually goes — worth flagging.
+  shorteners: ['bit.ly','tinyurl.com','t.co','goo.gl','is.gd','buff.ly','rb.gy','shorturl.at','cutt.ly']
 };
 
 /* Starter links (public, well-known sites). Add your own via the form. */
@@ -169,6 +202,57 @@ function pushLinks(items){
   return fresh.length;
 }
 
+/* ---------- security / privacy helpers ---------- */
+function isBlockedHost(u){
+  try { return CONFIG.blockedHosts.includes(new URL(u).hostname.replace(/^www\./,'')); }
+  catch(e){ return false; }
+}
+function isHttpsUrl(u){ try { return new URL(u).protocol === 'https:'; } catch(e){ return false; } }
+function isShortener(u){ try { return CONFIG.shorteners.includes(new URL(u).hostname.replace(/^www\./,'')); } catch(e){ return false; } }
+
+async function scanTrackers(url){
+  let html = '';
+  for (const p of CONFIG.proxies){
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(p + encodeURIComponent(url), { signal: ctrl.signal });
+      clearTimeout(t);
+      if (r.ok){ html = (await r.text()).slice(0, 400000); break; }
+    } catch(e){}
+  }
+  if (!html) return null;                       // scan failed — proxies blocked
+  const found = [];
+  const lower = html.toLowerCase();
+  for (const pat of CONFIG.trackerPatterns){
+    if (lower.includes(pat.toLowerCase())) found.push(pat);
+  }
+  return found;
+}
+
+async function inspectSecurity(l){
+  return {
+    isHttps: isHttpsUrl(l.url),
+    shortener: isShortener(l.url),
+    trackers: await scanTrackers(l.url)
+  };
+}
+
+function setSecurity(id, info){
+  const el = document.getElementById('sec-' + id);
+  if (!el) return;
+  const bits = [];
+  if (info.shortener) bits.push('URL shortener');
+  bits.push(info.isHttps ? 'HTTPS' : 'HTTP — not secure');
+  if (info.trackers === null) bits.push('privacy scan failed');
+  else if (info.trackers === 'n/a') { /* blocked host — no scan */ }
+  else if (info.trackers.length === 0) bits.push('no trackers');
+  else bits.push(info.trackers.length + ' tracker(s): ' + info.trackers.slice(0,3).join(', ') + (info.trackers.length > 3 ? ', …' : ''));
+  const clean = info.isHttps && !info.shortener && info.trackers !== 'n/a' && info.trackers !== null && info.trackers.length === 0;
+  el.className = 'sec' + (clean ? ' good' : ' bad');
+  el.textContent = bits.join(' · ');
+}
+
 /* ---------- link extraction ---------- */
 function extractUrls(text){
   const found = new Map();
@@ -181,6 +265,7 @@ function extractUrls(text){
       parsed.hash = '';
       const host = parsed.hostname.replace(/^www\./,'');
       if (SKIP_HOSTS.includes(host)) continue;
+      if (CONFIG.blockedHosts.includes(host)) continue;
       if (EXT_BLOCK.test(parsed.pathname)) continue;
       const key = parsed.hostname + parsed.pathname;
       if (!found.has(key)) found.set(key, parsed.href);
@@ -206,11 +291,13 @@ function cardHTML(l){
   const q = document.getElementById('search').value.toLowerCase();
   if (q && !(l.title + ' ' + l.cat + ' ' + l.desc).toLowerCase().includes(q)) return '';
   if (activeCat !== 'All' && l.cat !== activeCat) return '';
+  if (document.getElementById('httpOnly').checked && isHttpsUrl(l.url)) return '';
   const href = esc(l.url);
   return `<div class="card">
     <h3>${esc(l.title)}</h3>
     <div class="desc">${esc(l.desc || '')}</div>
     <div class="meta"><span class="dot" id="dot-${l.id}"></span><span id="st-${l.id}">not checked</span> · ${esc(l.cat)}</div>
+    <div class="sec" id="sec-${l.id}">privacy scan…</div>
     <div class="actions">
       <a href="${href}" target="_blank" rel="noopener">Open ↗</a>
       <button class="mini" onclick="checkOne('${l.id}')">Check</button>
@@ -266,9 +353,16 @@ async function runChecks(links){
   async function worker(){
     while (i < links.length && !stopChecking){
       const l = links[i++];
+      if (isBlockedHost(l.url)){
+        setStatus(l.id, 'bad', 'blocked by school');
+        setSecurity(l.id, { isHttps: isHttpsUrl(l.url), shortener: isShortener(l.url), trackers: 'n/a' });
+        continue;
+      }
       setStatus(l.id, 'checking', 'checking…');
       const r = await probe(l.url);
       setStatus(l.id, r, LABELS[r]);
+      // fire-and-forget so tracker scanning doesn't slow down the queue
+      inspectSecurity(l).then(info => setSecurity(l.id, info));
     }
   }
   await Promise.all([worker(), worker(), worker(), worker()]);
@@ -279,10 +373,16 @@ function checkAll(){ runChecks(allLinks()); }
 async function checkOne(id){
   const l = allLinks().find(x => x.id === id);
   if (!l) return;
+  if (isBlockedHost(l.url)){
+    setStatus(id, 'bad', 'blocked by school');
+    setSecurity(id, { isHttps: isHttpsUrl(l.url), shortener: isShortener(l.url), trackers: 'n/a' });
+    return;
+  }
   setStatus(id, 'checking', 'checking…');
   const r = await probe(l.url);
   if (!stopChecking) setStatus(id, r, LABELS[r]);
   stopChecking = false;
+  inspectSecurity(l).then(info => setSecurity(id, info));
 }
 
 /* ---------- discover (GitHub search API) ---------- */
