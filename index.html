@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GameHub — link checker</title>
+<style>
+:root{
+  --bg:#0f1117; --panel:#171a23; --card:#1c202b; --border:#2a2f3d;
+  --text:#e6e9f0; --muted:#8b93a7; --accent:#6366f1; --accent2:#818cf8;
+  --ok:#34d399; --bad:#f87171; --warn:#fbbf24;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+header h1{font-size:1.6rem;margin:0 0 4px}
+header p{color:var(--muted);margin:0 0 20px;font-size:.95rem;line-height:1.5}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+input[type=text]{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:.9rem}
+#search{flex:1;min-width:200px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer;font-size:.8rem;user-select:none}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{background:var(--accent);border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.85rem}
+.btn:hover{background:var(--accent2)}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
+.card:hover{border-color:var(--accent)}
+.card h3{margin:0;font-size:1rem}
+.card .desc{color:var(--muted);font-size:.8rem;flex:1}
+.card .meta{display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block}
+.dot.ok{background:var(--ok)}
+.dot.bad{background:var(--bad)}
+.dot.warn{background:var(--warn)}
+.dot.checking{background:var(--warn);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.card .actions{display:flex;gap:6px;align-items:center}
+.card .actions a{background:var(--panel);border:1px solid var(--border);color:var(--text);text-decoration:none;padding:6px 10px;border-radius:8px;font-size:.78rem}
+.card .actions a:hover{border-color:var(--accent)}
+.mini{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.75rem;padding:4px}
+.mini:hover{color:var(--bad)}
+.addform{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.addform input{flex:1;min-width:140px}
+.note{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:28px;font-size:.85rem;color:var(--muted);line-height:1.6}
+.note code{background:#262b38;padding:2px 6px;border-radius:6px;color:var(--text)}
+#status{font-size:.8rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GameHub</h1>
+    <p>Link checker for networks using Cisco Umbrella (DNS filtering). Paste your links and mirrors, hit <b>Check all</b> — it probes every site from your network and shows what's reachable right now.</p>
+  </header>
+
+  <div class="addform">
+    <input type="text" id="newTitle" placeholder="Title (e.g. Super Snake)" />
+    <input type="text" id="newUrl" placeholder="https://..." />
+    <input type="text" id="newCat" placeholder="Category (e.g. Arcade)" />
+    <button class="btn" onclick="addLink()">Add link</button>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search games…" oninput="render()" />
+    <div class="chips" id="chips"></div>
+    <button class="btn" onclick="checkAll()">Check all</button>
+    <button class="btn ghost" onclick="stopChecking=true">Stop</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <p id="status"></p>
+
+  <div class="note">
+    <b>How it works / limits</b><br/>
+    Umbrella filters at the DNS layer: blocked domains fail to resolve (NXDOMAIN) or answer with a block page. This page tests each link with a real browser request, so a green result means the domain resolves and responds on <i>this</i> network right now.<br/><br/>
+    • <b>Blocked or down</b> — DNS/connection failed. Could be Umbrella, or a dead mirror.<br/>
+    • <b>Reachable — verify</b> — the site answered, but its favicon didn't load, which can happen when Umbrella is serving its block page instead of the real site. Open it manually to confirm.<br/>
+    • Keep 2–3 mirrors per game, because domains rotate and get re-blocked constantly.<br/>
+    • If your school also blocks <code>github.io</code> itself or uses a deep TLS-inspection proxy (not just DNS), this approach won't help.
+  </div>
+</div>
+
+<script>
+/* ========== EDIT THIS LIST ==========
+   Starter links (public, well-known sites). Add your own mirrors
+   via the form on the page — they're saved in localStorage — or
+   paste them here. Real-world lists change constantly, so verify
+   before sharing. */
+const BUILTIN = [
+  { title:'Archive.org — Classic Games', url:'https://archive.org/details/classicpcgames', cat:'Retro', desc:'Huge library of playable DOS/arcade classics.' },
+  { title:'Poki', url:'https://poki.com', cat:'Arcade', desc:'Big catalog of browser games, mobile-friendly.' },
+  { title:'CrazyGames', url:'https://crazygames.com', cat:'Arcade', desc:'Thousands of free-to-play browser games.' },
+  { title:'ClassicReload', url:'https://classicreload.com', cat:'Retro', desc:'Abandonware classics that run in the browser.' },
+];
+
+const LS_CUSTOM = 'gh_custom_links';
+const LS_HIDDEN = 'gh_hidden_ids';
+
+let stopChecking = false;
+let activeCat = 'All';
+
+/* ---------- storage ---------- */
+const getCustom = () => { try { return JSON.parse(localStorage.getItem(LS_CUSTOM)) || []; } catch(e) { return []; } };
+const getHidden = () => { try { return JSON.parse(localStorage.getItem(LS_HIDDEN)) || []; } catch(e) { return []; } };
+const saveCustom = l => localStorage.setItem(LS_CUSTOM, JSON.stringify(l));
+const saveHidden = l => localStorage.setItem(LS_HIDDEN, JSON.stringify(l));
+
+const allLinks = () => [
+  ...BUILTIN.map((l,i) => ({ ...l, id:'b'+i, builtin:true })),
+  ...getCustom().map((l,i) => ({ ...l, id:'c'+i, builtin:false })),
+].filter(l => !getHidden().includes(l.id));
+
+const cats = () => ['All', ...[...new Set(allLinks().map(l => l.cat))]];
+
+/* ---------- rendering ---------- */
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderChips(){
+  const el = document.getElementById('chips');
+  el.innerHTML = '';
+  cats().forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (c === activeCat ? ' active' : '');
+    b.textContent = c;
+    b.onclick = () => { activeCat = c; renderChips(); render(); };
+    el.appendChild(b);
+  });
+}
+
+function cardHTML(l){
+  const q = document.getElementById('search').value.toLowerCase();
+  if (q && !(l.title + ' ' + l.cat + ' ' + l.desc).toLowerCase().includes(q)) return '';
+  if (activeCat !== 'All' && l.cat !== activeCat) return '';
+  const href = escapeHtml(l.url);
+  return `<div class="card" data-url="${href}" data-id="${l.id}">
+    <h3>${escapeHtml(l.title)}</h3>
+    <div class="desc">${escapeHtml(l.desc || '')}</div>
+    <div class="meta"><span class="dot" id="dot-${l.id}"></span><span id="st-${l.id}">not checked</span> · ${escapeHtml(l.cat)}</div>
+    <div class="actions">
+      <a href="${href}" target="_blank" rel="noopener">Open ↗</a>
+      <button class="mini" onclick="checkOne('${l.id}')">Check</button>
+      <button class="mini" onclick="removeLink('${l.id}')">Hide</button>
+    </div>
+  </div>`;
+}
+
+function render(){
+  renderChips();
+  const grid = document.getElementById('grid');
+  grid.innerHTML = allLinks().map(cardHTML).join('') ||
+    '<p style="color:var(--muted)">No links match. Add some above!</p>';
+}
+
+/* ---------- probing ---------- */
+function imgProbe(url, timeoutMs = 4000){
+  return new Promise(resolve => {
+    const img = new Image();
+    let done = false;
+    const t = setTimeout(() => finish(false), timeoutMs);
+    function finish(ok){ if (done) return; done = true; clearTimeout(t); resolve(ok); }
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    img.src = new URL('/favicon.ico', url).href;
+  });
+}
+
+async function probe(url){
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 7000);
+    await fetch(url, { mode:'no-cors', cache:'no-store', signal: ctrl.signal });
+    clearTimeout(t);
+  } catch(e) {
+    return 'bad';   // DNS failure (NXDOMAIN block) or unreachable
+  }
+  // Site answered — but was it the real site or Umbrella's block page?
+  return (await imgProbe(url)) ? 'ok' : 'warn';
+}
+
+function setStatus(id, state, label){
+  const dot = document.getElementById('dot-' + id);
+  const st  = document.getElementById('st-' + id);
+  if (!dot || !st) return;
+  dot.className = 'dot ' + state;
+  st.textContent = label;
+}
+
+async function checkOne(id){
+  const l = allLinks().find(x => x.id === id);
+  if (!l) return;
+  setStatus(id, 'checking', 'checking…');
+  const r = await probe(l.url);
+  if (stopChecking) { stopChecking = false; return; }
+  setStatus(id, r, r === 'ok' ? 'reachable' : r === 'warn' ? 'reachable — verify' : 'blocked or down');
+}
+
+async function checkAll(){
+  stopChecking = false;
+  const links = allLinks();
+  let i = 0;
+  async function worker(){
+    while (i < links.length && !stopChecking){
+      const l = links[i++];
+      setStatus(l.id, 'checking', 'checking…');
+      const r = await probe(l.url);
+      setStatus(l.id, r, r === 'ok' ? 'reachable' : r === 'warn' ? 'reachable — verify' : 'blocked or down');
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]); // 4 parallel probes
+  document.getElementById('status').textContent = 'Last full check: ' + new Date().toLocaleTimeString();
+}
+
+/* ---------- add / remove ---------- */
+function addLink(){
+  const t = document.getElementById('newTitle').value.trim();
+  const u = document.getElementById('newUrl').value.trim();
+  const c = document.getElementById('newCat').value.trim() || 'Misc';
+  if (!t || !u) { alert('Title and URL are required.'); return; }
+  let parsed;
+  try { parsed = new URL(u); } catch(e) { alert('Invalid URL — must start with http(s)://'); return; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') { alert('Only http(s) links are supported.'); return; }
+  const list = getCustom();
+  list.push({ title:t, url:parsed.href, cat:c, desc:'Custom link' });
+  saveCustom(list);
+  ['newTitle','newUrl','newCat'].forEach(id => document.getElementById(id).value = '');
+  render();
+}
+
+function removeLink(id){
+  if (id.startsWith('b')){
+    const h = getHidden(); h.push(id); saveHidden(h);
+  } else {
+    const list = getCustom();
+    list.splice(Number(id.slice(1)), 1);
+    saveCustom(list);
+  }
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
