@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>GameHub — link checker</title>
+<title>Proxy and Game List — finder &amp; link checker</title>
 <style>
 :root{
   --bg:#0f1117; --panel:#171a23; --card:#1c202b; --border:#2a2f3d;
@@ -15,7 +15,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
 header h1{font-size:1.6rem;margin:0 0 4px}
 header p{color:var(--muted);margin:0 0 20px;font-size:.95rem;line-height:1.5}
-.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
 input[type=text]{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:.9rem}
 #search{flex:1;min-width:200px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -24,35 +24,38 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
 .btn{background:var(--accent);border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.85rem}
 .btn:hover{background:var(--accent2)}
 .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn.small{padding:5px 10px;font-size:.75rem}
+.btn:disabled{opacity:.5;cursor:default}
+.addform{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.addform input{flex:1;min-width:140px}
+.hidden{display:none}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
 .card:hover{border-color:var(--accent)}
-.card h3{margin:0;font-size:1rem}
+.card h3{margin:0;font-size:1rem;word-break:break-word}
 .card .desc{color:var(--muted);font-size:.8rem;flex:1}
 .card .meta{display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--muted)}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;flex:0 0 auto}
 .dot.ok{background:var(--ok)}
 .dot.bad{background:var(--bad)}
 .dot.warn{background:var(--warn)}
 .dot.checking{background:var(--warn);animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.35}}
-.card .actions{display:flex;gap:6px;align-items:center}
+.card .actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .card .actions a{background:var(--panel);border:1px solid var(--border);color:var(--text);text-decoration:none;padding:6px 10px;border-radius:8px;font-size:.78rem}
 .card .actions a:hover{border-color:var(--accent)}
 .mini{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.75rem;padding:4px}
 .mini:hover{color:var(--bad)}
-.addform{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.addform input{flex:1;min-width:140px}
 .note{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:28px;font-size:.85rem;color:var(--muted);line-height:1.6}
 .note code{background:#262b38;padding:2px 6px;border-radius:6px;color:var(--text)}
-#status{font-size:.8rem;color:var(--muted)}
+#status{font-size:.8rem;color:var(--muted);margin-top:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>GameHub</h1>
-    <p>Link checker for networks using Cisco Umbrella (DNS filtering). Paste your links and mirrors, hit <b>Check all</b> — it probes every site from your network and shows what's reachable right now.</p>
+    <p>Auto-finder + link checker. It <b>discovers</b> game links from GitHub repos, <b>scrapes</b> links from any page you paste, and <b>probes</b> everything from your network so you can see what's reachable right now.</p>
   </header>
 
   <div class="addform">
@@ -62,11 +65,24 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
     <button class="btn" onclick="addLink()">Add link</button>
   </div>
 
-  <div class="toolbar">
+  <div class="row">
     <input type="text" id="search" placeholder="Search games…" oninput="render()" />
     <div class="chips" id="chips"></div>
     <button class="btn" onclick="checkAll()">Check all</button>
     <button class="btn ghost" onclick="stopChecking=true">Stop</button>
+  </div>
+
+  <div class="row">
+    <button class="btn small" id="btnDiscover" onclick="discover()">Discover from GitHub</button>
+    <button class="btn small ghost" onclick="toggleScrape()">Scrape a page…</button>
+    <button class="btn small ghost" onclick="exportLinks()">Export</button>
+    <label class="btn small ghost" style="cursor:pointer">Import<input type="file" accept=".json" id="fileImport" style="display:none" onchange="importLinksFile(this)" /></label>
+  </div>
+
+  <div class="addform hidden" id="scrapeRow">
+    <input type="text" id="scrapeUrl" placeholder="Paste any page URL that lists games (e.g. https://some-site.com/games)" />
+    <button class="btn" onclick="importFromUrl()">Scrape</button>
+    <button class="btn ghost" onclick="toggleScrape()">Cancel</button>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -74,20 +90,29 @@ input[type=text]{background:var(--panel);border:1px solid var(--border);color:va
 
   <div class="note">
     <b>How it works / limits</b><br/>
-    Umbrella filters at the DNS layer: blocked domains fail to resolve (NXDOMAIN) or answer with a block page. This page tests each link with a real browser request, so a green result means the domain resolves and responds on <i>this</i> network right now.<br/><br/>
-    • <b>Blocked or down</b> — DNS/connection failed. Could be Umbrella, or a dead mirror.<br/>
-    • <b>Reachable — verify</b> — the site answered, but its favicon didn't load, which can happen when Umbrella is serving its block page instead of the real site. Open it manually to confirm.<br/>
-    • Keep 2–3 mirrors per game, because domains rotate and get re-blocked constantly.<br/>
-    • If your school also blocks <code>github.io</code> itself or uses a deep TLS-inspection proxy (not just DNS), this approach won't help.
+    ContentKeeper and Umbrella filter at the network level, so this page can't change what's blocked — but it <i>can</i> find and test links for you. With ContentKeeper, a red result usually means the proxy reset the connection (blocked); yellow means the site answered but looks like a block page — open it manually to confirm.<br/><br/>
+    • <b>Discover</b> uses the GitHub search API — it's rate-limited (~10 searches/min, 60 core calls/hr without login), and <code>api.github.com</code> can itself be blocked.<br/>
+    • <b>Scrape</b> routes through public CORS proxies, which get blocked or rate-limited often. If it fails, add another proxy to <code>CONFIG.proxies</code>.<br/>
+    • If the filter blocks <code>github.io</code> or <code>api.github.com</code> by category, the page won't load or Discover won't work — a static checker can't fix that.<br/>
+    • Links are saved in your browser only — use <b>Export</b>/<b>Import</b> to share your list with friends.<br/>
+    • Check your school's acceptable-use policy before relying on this.
   </div>
 </div>
 
 <script>
-/* ========== EDIT THIS LIST ==========
-   Starter links (public, well-known sites). Add your own mirrors
-   via the form on the page — they're saved in localStorage — or
-   paste them here. Real-world lists change constantly, so verify
-   before sharing. */
+/* ================= CONFIG ================= */
+const CONFIG = {
+  searchQuery: 'unblocked games',
+  maxRepos: 5,
+  maxLinksPerRepo: 12,
+  maxImportLinks: 40,
+  proxies: [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?url='
+  ]
+};
+
+/* Starter links (public, well-known sites). Add your own via the form. */
 const BUILTIN = [
   { title:'Archive.org — Classic Games', url:'https://archive.org/details/classicpcgames', cat:'Retro', desc:'Huge library of playable DOS/arcade classics.' },
   { title:'Poki', url:'https://poki.com', cat:'Arcade', desc:'Big catalog of browser games, mobile-friendly.' },
@@ -95,30 +120,76 @@ const BUILTIN = [
   { title:'ClassicReload', url:'https://classicreload.com', cat:'Retro', desc:'Abandonware classics that run in the browser.' },
 ];
 
-const LS_CUSTOM = 'gh_custom_links';
-const LS_HIDDEN = 'gh_hidden_ids';
+const SKIP_HOSTS = ['github.com','raw.githubusercontent.com','gist.github.com','api.github.com','google.com','googleapis.com','gstatic.com','googletagmanager.com','google-analytics.com','doubleclick.net','facebook.com','twitter.com','x.com','instagram.com','youtube.com','youtu.be','w3.org','mozilla.org','schema.org','example.com','wikipedia.org','reddit.com','discord.com','discord.gg','twitch.tv','netflix.com','spotify.com'];
+const EXT_BLOCK = /\.(css|js|mjs|json|xml|svg|png|jpe?g|gif|webp|ico|bmp|mp3|mp4|webm|ogg|ogv|pdf|zip|rar|7z|tar|gz|woff2?|ttf|eot|map|txt|md|rss|atom)$/i;
+
+const LABELS = { ok:'reachable', warn:'reachable — verify', bad:'blocked or down' };
 
 let stopChecking = false;
+let busy = false;
 let activeCat = 'All';
 
 /* ---------- storage ---------- */
-const getCustom = () => { try { return JSON.parse(localStorage.getItem(LS_CUSTOM)) || []; } catch(e) { return []; } };
-const getHidden = () => { try { return JSON.parse(localStorage.getItem(LS_HIDDEN)) || []; } catch(e) { return []; } };
-const saveCustom = l => localStorage.setItem(LS_CUSTOM, JSON.stringify(l));
-const saveHidden = l => localStorage.setItem(LS_HIDDEN, JSON.stringify(l));
+const store = {
+  get(){ try { return JSON.parse(localStorage.getItem('gh_links')) || []; } catch(e){ return []; } },
+  set(v){ localStorage.setItem('gh_links', JSON.stringify(v)); }
+};
+const getHidden = () => { try { return JSON.parse(localStorage.getItem('gh_hidden')) || []; } catch(e){ return []; } };
+const saveHidden = v => localStorage.setItem('gh_hidden', JSON.stringify(v));
+
+function migrate(){
+  try{
+    const old = JSON.parse(localStorage.getItem('gh_custom_links'));
+    if (Array.isArray(old) && old.length && !localStorage.getItem('gh_links')) store.set(old);
+  }catch(e){}
+}
 
 const allLinks = () => [
   ...BUILTIN.map((l,i) => ({ ...l, id:'b'+i, builtin:true })),
-  ...getCustom().map((l,i) => ({ ...l, id:'c'+i, builtin:false })),
+  ...store.get().map((l,i) => ({ ...l, id:'u'+i, builtin:false })),
 ].filter(l => !getHidden().includes(l.id));
 
-const cats = () => ['All', ...[...new Set(allLinks().map(l => l.cat))]];
+const cats = () => ['All', ...[...new Set(allLinks().map(l => l.cat).filter(Boolean))]];
 
-/* ---------- rendering ---------- */
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){ return u; } }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function pushLinks(items){
+  const cur = store.get();
+  const seen = new Set(cur.map(l => l.url));
+  const fresh = items.filter(l => l && l.url && !seen.has(l.url));
+  fresh.forEach(l => cur.push({
+    title: String(l.title || hostOf(l.url)).slice(0,120),
+    url: l.url,
+    cat: l.cat || 'Misc',
+    desc: l.desc || '',
+    source: l.source || 'custom'
+  }));
+  store.set(cur);
+  return fresh.length;
 }
 
+/* ---------- link extraction ---------- */
+function extractUrls(text){
+  const found = new Map();
+  const re = /https?:\/\/[^\s"'<>()\[\]{}]+/gi;
+  let m;
+  while ((m = re.exec(text))){
+    let u = m[0].replace(/[.,;:!?)\]}>]+$/,'');
+    try {
+      const parsed = new URL(u);
+      parsed.hash = '';
+      const host = parsed.hostname.replace(/^www\./,'');
+      if (SKIP_HOSTS.includes(host)) continue;
+      if (EXT_BLOCK.test(parsed.pathname)) continue;
+      const key = parsed.hostname + parsed.pathname;
+      if (!found.has(key)) found.set(key, parsed.href);
+    } catch(e){}
+  }
+  return [...found.values()];
+}
+
+/* ---------- render ---------- */
 function renderChips(){
   const el = document.getElementById('chips');
   el.innerHTML = '';
@@ -135,11 +206,11 @@ function cardHTML(l){
   const q = document.getElementById('search').value.toLowerCase();
   if (q && !(l.title + ' ' + l.cat + ' ' + l.desc).toLowerCase().includes(q)) return '';
   if (activeCat !== 'All' && l.cat !== activeCat) return '';
-  const href = escapeHtml(l.url);
-  return `<div class="card" data-url="${href}" data-id="${l.id}">
-    <h3>${escapeHtml(l.title)}</h3>
-    <div class="desc">${escapeHtml(l.desc || '')}</div>
-    <div class="meta"><span class="dot" id="dot-${l.id}"></span><span id="st-${l.id}">not checked</span> · ${escapeHtml(l.cat)}</div>
+  const href = esc(l.url);
+  return `<div class="card">
+    <h3>${esc(l.title)}</h3>
+    <div class="desc">${esc(l.desc || '')}</div>
+    <div class="meta"><span class="dot" id="dot-${l.id}"></span><span id="st-${l.id}">not checked</span> · ${esc(l.cat)}</div>
     <div class="actions">
       <a href="${href}" target="_blank" rel="noopener">Open ↗</a>
       <button class="mini" onclick="checkOne('${l.id}')">Check</button>
@@ -151,9 +222,10 @@ function cardHTML(l){
 function render(){
   renderChips();
   const grid = document.getElementById('grid');
-  grid.innerHTML = allLinks().map(cardHTML).join('') ||
-    '<p style="color:var(--muted)">No links match. Add some above!</p>';
+  grid.innerHTML = allLinks().map(cardHTML).join('') || '<p style="color:var(--muted)">No links match. Discover, scrape, or add some!</p>';
 }
+
+function setStatusLine(t){ document.getElementById('status').textContent = t; }
 
 /* ---------- probing ---------- */
 function imgProbe(url, timeoutMs = 4000){
@@ -174,11 +246,10 @@ async function probe(url){
     const t = setTimeout(() => ctrl.abort(), 7000);
     await fetch(url, { mode:'no-cors', cache:'no-store', signal: ctrl.signal });
     clearTimeout(t);
-  } catch(e) {
-    return 'bad';   // DNS failure (NXDOMAIN block) or unreachable
+  } catch(e){
+    return 'bad'; // DNS fail or proxy reset (typical ContentKeeper block)
   }
-  // Site answered — but was it the real site or Umbrella's block page?
-  return (await imgProbe(url)) ? 'ok' : 'warn';
+  return (await imgProbe(url)) ? 'ok' : 'warn'; // block pages usually lack the real favicon
 }
 
 function setStatus(id, state, label){
@@ -189,29 +260,164 @@ function setStatus(id, state, label){
   st.textContent = label;
 }
 
-async function checkOne(id){
-  const l = allLinks().find(x => x.id === id);
-  if (!l) return;
-  setStatus(id, 'checking', 'checking…');
-  const r = await probe(l.url);
-  if (stopChecking) { stopChecking = false; return; }
-  setStatus(id, r, r === 'ok' ? 'reachable' : r === 'warn' ? 'reachable — verify' : 'blocked or down');
-}
-
-async function checkAll(){
+async function runChecks(links){
   stopChecking = false;
-  const links = allLinks();
   let i = 0;
   async function worker(){
     while (i < links.length && !stopChecking){
       const l = links[i++];
       setStatus(l.id, 'checking', 'checking…');
       const r = await probe(l.url);
-      setStatus(l.id, r, r === 'ok' ? 'reachable' : r === 'warn' ? 'reachable — verify' : 'blocked or down');
+      setStatus(l.id, r, LABELS[r]);
     }
   }
-  await Promise.all([worker(), worker(), worker(), worker()]); // 4 parallel probes
-  document.getElementById('status').textContent = 'Last full check: ' + new Date().toLocaleTimeString();
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+
+function checkAll(){ runChecks(allLinks()); }
+
+async function checkOne(id){
+  const l = allLinks().find(x => x.id === id);
+  if (!l) return;
+  setStatus(id, 'checking', 'checking…');
+  const r = await probe(l.url);
+  if (!stopChecking) setStatus(id, r, LABELS[r]);
+  stopChecking = false;
+}
+
+/* ---------- discover (GitHub search API) ---------- */
+async function discover(){
+  if (busy) return;
+  busy = true;
+  const btn = document.getElementById('btnDiscover');
+  btn.disabled = true;
+  setStatusLine('Searching GitHub for "' + CONFIG.searchQuery + '"…');
+
+  let repos = [];
+  try {
+    const res = await fetch('https://api.github.com/search/repositories?q=' + encodeURIComponent(CONFIG.searchQuery) + '&sort=updated&order=desc&per_page=' + CONFIG.maxRepos);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    repos = (data.items || []).slice(0, CONFIG.maxRepos);
+  } catch(e){
+    setStatusLine('GitHub search failed (' + e.message + ') — api.github.com may be blocked or rate-limited.');
+    busy = false; btn.disabled = false; return;
+  }
+
+  let added = 0, sources = 0;
+  const freshUrls = new Set();
+  for (const repo of repos){
+    let text = '';
+    try {
+      const r = await fetch('https://api.github.com/repos/' + repo.full_name + '/readme', { headers:{ Accept:'application/vnd.github.raw' } });
+      if (r.ok) text = await r.text();
+    } catch(e){}
+    const urls = extractUrls(text);
+    try {
+      if (repo.homepage && urls.indexOf(repo.homepage) === -1) urls.unshift(repo.homepage);
+    } catch(e){}
+    const uniq = [...new Set(urls)].slice(0, CONFIG.maxLinksPerRepo);
+    if (uniq.length){
+      sources++;
+      const before = new Set(store.get().map(l => l.url));
+      added += pushLinks(uniq.map(u => ({
+        title: repo.name + ' — ' + hostOf(u),
+        url: u,
+        cat: 'GitHub',
+        desc: (repo.description || '').slice(0, 90),
+        source: 'github'
+      })));
+      uniq.forEach(u => { if (!before.has(u)) freshUrls.add(u); });
+    }
+  }
+
+  render();
+  const fresh = allLinks().filter(l => freshUrls.has(l.url));
+  setStatusLine('Found ' + added + ' new link(s) from ' + sources + ' repo(s). Checking them…');
+  if (fresh.length) await runChecks(fresh);
+  setStatusLine('Done. Added ' + added + ' link(s) from ' + sources + ' repo(s).');
+  busy = false;
+  btn.disabled = false;
+}
+
+/* ---------- scrape (CORS proxy) ---------- */
+function toggleScrape(){
+  document.getElementById('scrapeRow').classList.toggle('hidden');
+}
+
+async function importFromUrl(){
+  if (busy) return;
+  busy = true;
+  const raw = document.getElementById('scrapeUrl').value.trim();
+  if (!raw){ busy = false; return; }
+  let target;
+  try { target = new URL(raw); } catch(e){ setStatusLine('That is not a valid URL.'); busy = false; return; }
+
+  setStatusLine('Fetching ' + hostOf(target) + ' through CORS proxies…');
+  let html = '';
+  for (const p of CONFIG.proxies){
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 9000);
+      const r = await fetch(p + encodeURIComponent(target.href), { signal: ctrl.signal });
+      clearTimeout(t);
+      if (r.ok){ html = await r.text(); break; }
+    } catch(e){}
+  }
+  if (!html){
+    setStatusLine('Could not fetch that page — all CORS proxies failed or are blocked by the filter.');
+    busy = false; return;
+  }
+
+  const urls = extractUrls(html).slice(0, CONFIG.maxImportLinks);
+  const before = new Set(store.get().map(l => l.url));
+  const added = pushLinks(urls.map(u => ({
+    title: hostOf(u),
+    url: u,
+    cat: 'Scraped',
+    desc: 'scraped from ' + hostOf(target),
+    source: 'import'
+  })));
+  render();
+  const fresh = allLinks().filter(l => !before.has(l.url) && urls.includes(l.url));
+  setStatusLine('Imported ' + added + ' link(s) from ' + hostOf(target) + '. Checking them…');
+  if (fresh.length) await runChecks(fresh);
+  setStatusLine('Done. Imported ' + added + ' link(s) from ' + hostOf(target) + '.');
+  busy = false;
+}
+
+/* ---------- export / import ---------- */
+function exportLinks(){
+  const data = { exported: new Date().toISOString(), links: store.get() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'gamehub-links.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importLinksFile(f){
+  const file = f.files[0];
+  if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const data = JSON.parse(rd.result);
+      const arr = Array.isArray(data) ? data : (data.links || []);
+      const added = pushLinks(arr.filter(l => l && l.url).map(l => ({
+        title: l.title || hostOf(l.url),
+        url: l.url,
+        cat: l.cat || 'Imported',
+        desc: l.desc || '',
+        source: 'import'
+      })));
+      render();
+      setStatusLine('Imported ' + added + ' link(s) from file.');
+    } catch(e){ setStatusLine('Invalid export file.'); }
+  };
+  rd.readAsText(file);
+  f.value = '';
 }
 
 /* ---------- add / remove ---------- */
@@ -219,13 +425,11 @@ function addLink(){
   const t = document.getElementById('newTitle').value.trim();
   const u = document.getElementById('newUrl').value.trim();
   const c = document.getElementById('newCat').value.trim() || 'Misc';
-  if (!t || !u) { alert('Title and URL are required.'); return; }
+  if (!t || !u){ alert('Title and URL are required.'); return; }
   let parsed;
-  try { parsed = new URL(u); } catch(e) { alert('Invalid URL — must start with http(s)://'); return; }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') { alert('Only http(s) links are supported.'); return; }
-  const list = getCustom();
-  list.push({ title:t, url:parsed.href, cat:c, desc:'Custom link' });
-  saveCustom(list);
+  try { parsed = new URL(u); } catch(e){ alert('Invalid URL — must start with http(s)://'); return; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:'){ alert('Only http(s) links are supported.'); return; }
+  pushLinks([{ title:t, url:parsed.href, cat:c, desc:'Custom link', source:'custom' }]);
   ['newTitle','newUrl','newCat'].forEach(id => document.getElementById(id).value = '');
   render();
 }
@@ -234,13 +438,15 @@ function removeLink(id){
   if (id.startsWith('b')){
     const h = getHidden(); h.push(id); saveHidden(h);
   } else {
-    const list = getCustom();
+    const list = store.get();
     list.splice(Number(id.slice(1)), 1);
-    saveCustom(list);
+    store.set(list);
   }
   render();
 }
 
+/* ---------- boot ---------- */
+migrate();
 render();
 </script>
 </body>
